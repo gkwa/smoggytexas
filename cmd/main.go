@@ -89,7 +89,7 @@ func main() {
 	for _, region := range regions {
 		data := DescribePriceCommand{
 			Region:       *region.RegionName,
-			InstanceType: "t3.xlarge",
+			InstanceType: instanceType,
 			Epoch:        time.Now().Unix(),
 			Query:        shellescape.Quote("SpotPriceHistory[*].{az:AvailabilityZone, price:SpotPrice}"),
 			Description:  shellescape.Quote("Linux/UNIX"),
@@ -111,7 +111,7 @@ func main() {
 	var wg sync.WaitGroup
 
 	// Limit the number of concurrently running commands to maxConcurrent
-	maxConcurrent := 7
+	maxConcurrent := 20
 	semaphore := make(chan struct{}, maxConcurrent)
 	resultsChan := make(chan AZs, len(cmds))
 
