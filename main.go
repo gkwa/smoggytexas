@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -100,6 +101,16 @@ func main() {
 	// Split the comma-separated instance types into a slice
 	instanceTypeSlice := strings.Split(instanceTypes, ",")
 
+	// Marshal the struct to a JSON string
+	instTypesJsonString, err := json.Marshal(instanceTypeSlice)
+	if err != nil {
+		fmt.Println("Error marshaling JSON:", err)
+		return
+	}
+
+	// Print the JSON string
+	logger.Debug(string(instTypesJsonString))
+
 	regions, err := lemondrop.GetAllAwsRegions()
 	if err != nil {
 		logger.Error(err.Error())
@@ -116,13 +127,11 @@ func main() {
 
 		var instanceTypeFilters []types.Filter
 
-		for _, instanceType := range instanceTypeSlice {
-			instanceTypeFilter := types.Filter{
-				Name:   aws.String("instance-type"),
-				Values: []string{instanceType},
-			}
-			instanceTypeFilters = append(instanceTypeFilters, instanceTypeFilter)
+		instanceTypeFilter := types.Filter{
+			Name:   aws.String("instance-type"),
+			Values: instanceTypeSlice,
 		}
+		instanceTypeFilters = append(instanceTypeFilters, instanceTypeFilter)
 
 		input := ec2.DescribeSpotPriceHistoryInput{
 			Filters:             instanceTypeFilters,
