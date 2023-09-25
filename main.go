@@ -30,8 +30,8 @@ type AzPrices []AZPrice
 type AZPrice struct {
 	AZ           string  `json:"az"`
 	Price        float64 `json:"price"`
-	Region       string
 	InstanceType string
+	Region       string
 }
 
 func runCommand(logger *slog.Logger, ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPriceHistoryInput, resultsChan chan<- AzPrices) {
@@ -143,16 +143,14 @@ func main() {
 		}
 	}
 
-	// Replace the original map with the filtered map
 	regions = filteredMap
 
 	resultsChan := make(chan AzPrices, len(regions)*len(instanceTypeSlice))
 
 	var wg sync.WaitGroup
-	for _, region := range regions {
-
-		logger.Debug("region: " + region.RegionCode)
-		cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region.RegionCode))
+	for _, regionDetail := range regions {
+		logger.Debug("region: " + regionDetail.RegionCode)
+		cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(regionDetail.RegionCode))
 		if err != nil {
 			logger.Error("Error loading AWS configuration:", err)
 		}
@@ -201,6 +199,7 @@ func main() {
 
 	for _, item := range y {
 		r := humanize.FormatFloat("#,###.###", item.Price)
-		fmt.Printf("$%s %s %s %s %s\n", r, item.Region, item.AZ, item.InstanceType, time.Now().Format(time.RFC3339))
+		y := regions[item.Region]
+		fmt.Printf("$%s [%s] %s %s %s\n", r, y.RegionDesc, item.AZ, item.InstanceType, time.Now().Format(time.RFC3339))
 	}
 }
