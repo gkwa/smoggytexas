@@ -34,7 +34,7 @@ type AZPrice struct {
 	InstanceType string
 }
 
-func runCommand(ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPriceHistoryInput, resultsChan chan<- AzPrices) {
+func runCommand(logger *slog.Logger, ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPriceHistoryInput, resultsChan chan<- AzPrices) {
 	client := ec2.NewFromConfig(cfg)
 
 	resp, err := client.DescribeSpotPriceHistory(ctx, input)
@@ -62,8 +62,10 @@ func runCommand(ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPric
 
 func main() {
 	var instanceTypes string
+	var verbose bool
 
 	flag.StringVar(&instanceTypes, "instanceTypes", "", "Comma-separated list of instance types to query")
+	flag.BoolVar(&verbose, "verbose", false, "Debug mode")
 
 	flag.Parse()
 
@@ -71,9 +73,14 @@ func main() {
 	loggerIgnoreDebug := slog.New(handlerIngoreDebug)
 	slog.SetDefault(loggerIgnoreDebug)
 
+	logLevel := slog.LevelInfo
+	if verbose {
+		logLevel = slog.LevelDebug
+	}
+
 	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		AddSource: true,
-		Level:     slog.LevelDebug,
+		Level:     logLevel,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.SourceKey {
 				source, _ := a.Value.Any().(*slog.Source)
@@ -98,10 +105,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Split the comma-separated instance types into a slice
 	instanceTypeSlice := strings.Split(instanceTypes, ",")
 
-	// Marshal the struct to a JSON string
 	instTypesJsonString, err := json.Marshal(instanceTypeSlice)
 	if err != nil {
 		fmt.Println("Error marshaling JSON:", err)
@@ -116,11 +121,38 @@ func main() {
 		logger.Error(err.Error())
 	}
 
+	// List of substrings to search for
+	substrings := []string{"us-gov", "cn-"}
+
+	// Create a filtered map
+	filteredMap := make(lemondrop.RegionDetails)
+
+	for key, value := range regions {
+		found := false
+
+		for _, prefix := range substrings {
+			if strings.HasPrefix(key, prefix) {
+				found = true
+				break
+			}
+		}
+
+		// If none of the substrings were found in the key, add it to the filtered map
+		if !found {
+			filteredMap[key] = value
+		}
+	}
+
+	// Replace the original map with the filtered map
+	regions = filteredMap
+
 	resultsChan := make(chan AzPrices, len(regions)*len(instanceTypeSlice))
 
 	var wg sync.WaitGroup
 	for _, region := range regions {
-		cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(*region.RegionName))
+
+		logger.Debug("region: " + region.RegionCode)
+		cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region.RegionCode))
 		if err != nil {
 			logger.Error("Error loading AWS configuration:", err)
 		}
@@ -142,7 +174,7 @@ func main() {
 		wg.Add(1) // Increment the WaitGroup counter for each goroutine
 		go func() {
 			defer wg.Done() // Decrement the WaitGroup counter when the goroutine exits
-			runCommand(context.TODO(), cfg, &input, resultsChan)
+			runCommand(logger, context.TODO(), cfg, &input, resultsChan)
 		}()
 	}
 
