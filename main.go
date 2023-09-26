@@ -33,7 +33,9 @@ type AZPrice struct {
 	Region       string
 }
 
-func runCommand(logger *slog.Logger, ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPriceHistoryInput, regions lemondrop.RegionDetails, resultsChan chan<- AzPrices) {
+var regions lemondrop.RegionDetails
+
+func runCommand(logger *slog.Logger, ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPriceHistoryInput, resultsChan chan<- AzPrices) {
 	client := ec2.NewFromConfig(cfg)
 
 	resp, err := client.DescribeSpotPriceHistory(ctx, input)
@@ -97,7 +99,9 @@ func main() {
 
 	instanceTypeSlice := strings.Split(instanceTypes, ",")
 
-	regions, err := lemondrop.GetRegionDetails()
+	var err error
+
+	regions, err = lemondrop.GetRegionDetails()
 	if err != nil {
 		logger.Error(err.Error())
 	}
@@ -184,7 +188,7 @@ func main() {
 			timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			runCommand(logger, timeoutCtx, cfg, &input, regions, resultsChan)
+			runCommand(logger, timeoutCtx, cfg, &input, resultsChan)
 		}()
 	}
 
