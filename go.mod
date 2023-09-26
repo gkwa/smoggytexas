@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.18.42
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.120.0
 	github.com/dustin/go-humanize v1.0.1
-	github.com/taylormonacelli/lemondrop v0.0.1
+	github.com/taylormonacelli/lemondrop v0.0.0-00010101000000-000000000000
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
 )
 
@@ -28,3 +28,5 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	golang.org/x/sys v0.12.0 // indirect
 )
+
+replace github.com/taylormonacelli/lemondrop => ../lemondrop

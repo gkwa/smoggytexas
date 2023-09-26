@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,12 +33,13 @@ type AZPrice struct {
 	Region       string
 }
 
-func runCommand(logger *slog.Logger, ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPriceHistoryInput, resultsChan chan<- AzPrices) {
+func runCommand(logger *slog.Logger, ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPriceHistoryInput, regions lemondrop.RegionDetails, resultsChan chan<- AzPrices) {
 	client := ec2.NewFromConfig(cfg)
 
 	resp, err := client.DescribeSpotPriceHistory(ctx, input)
 	if err != nil {
-		panic(err)
+		logger.Error(err.Error(), "region", cfg.Region, "regionDesc", regions[cfg.Region].RegionDesc)
+		return
 	}
 	var azs AzPrices
 
@@ -62,41 +62,31 @@ func runCommand(logger *slog.Logger, ctx context.Context, cfg aws.Config, input 
 
 func main() {
 	var instanceTypes string
-	var verbose bool
 
 	flag.StringVar(&instanceTypes, "instanceTypes", "", "Comma-separated list of instance types to query")
-	flag.BoolVar(&verbose, "verbose", false, "Debug mode")
 
 	flag.Parse()
 
-	handlerIngoreDebug := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})
-	loggerIgnoreDebug := slog.New(handlerIngoreDebug)
-	slog.SetDefault(loggerIgnoreDebug)
-
-	logLevel := slog.LevelInfo
-	if verbose {
-		logLevel = slog.LevelDebug
-	}
-
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+	logLevel := &slog.LevelVar{} // INFO
+	logLevel.Set(slog.LevelDebug)
+	opts := slog.HandlerOptions{
 		AddSource: true,
 		Level:     logLevel,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.SourceKey {
-				source, _ := a.Value.Any().(*slog.Source)
-				if source != nil {
-					source.File = filepath.Base(source.File)
-				}
-			}
-			// Remove time.
 			if a.Key == slog.TimeKey && len(groups) == 0 {
 				return slog.Attr{}
 			}
 			return a
 		},
-	})
+	}
+	handler1 := slog.NewTextHandler(os.Stdout, &opts)
 
-	logger := slog.New(handler)
+	// default logger customized
+	slog.SetDefault(slog.New(handler1))
+
+	handler2 := slog.NewTextHandler(os.Stderr, &opts)
+
+	logger := slog.New(handler2)
 
 	// Check if "instanceTypes" is empty and exit with an error if it is
 	if instanceTypes == "" {
@@ -107,22 +97,24 @@ func main() {
 
 	instanceTypeSlice := strings.Split(instanceTypes, ",")
 
+	regions, err := lemondrop.GetRegionDetails()
+	if err != nil {
+		logger.Error(err.Error())
+	}
+
 	instTypesJsonString, err := json.Marshal(instanceTypeSlice)
 	if err != nil {
-		fmt.Println("Error marshaling JSON:", err)
+		logger.Warn("Error marshaling JSON: ", err)
 		return
 	}
 
 	// Print the JSON string
 	logger.Debug(string(instTypesJsonString))
-
-	regions, err := lemondrop.GetAllAwsRegions()
-	if err != nil {
-		logger.Error(err.Error())
-	}
+	logger.Debug("regions", "count", len(regions))
 
 	// List of substrings to search for
 	substrings := []string{"us-gov", "cn-"}
+	logger.Debug("regions", "exclude prefix", substrings)
 
 	// Create a filtered map
 	filteredMap := make(lemondrop.RegionDetails)
@@ -147,9 +139,16 @@ func main() {
 
 	resultsChan := make(chan AzPrices, len(regions)*len(instanceTypeSlice))
 
+	// Define the maximum number of concurrent workers
+	maxConcurrent := 10
+
+	// Use a semaphore pattern to limit concurrent goroutines
+	semaphore := make(chan struct{}, maxConcurrent)
+
 	var wg sync.WaitGroup
+
 	for _, regionDetail := range regions {
-		logger.Debug("region: " + regionDetail.RegionCode)
+		logger.Debug("regions loop", "region", regionDetail.RegionCode)
 		cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(regionDetail.RegionCode))
 		if err != nil {
 			logger.Error("Error loading AWS configuration:", err)
@@ -169,10 +168,23 @@ func main() {
 			StartTime:           aws.Time(time.Now()),
 		}
 
-		wg.Add(1) // Increment the WaitGroup counter for each goroutine
+		wg.Add(1)
+
+		// Acquire a slot in the semaphore
+		semaphore <- struct{}{}
+
 		go func() {
-			defer wg.Done() // Decrement the WaitGroup counter when the goroutine exits
-			runCommand(logger, context.TODO(), cfg, &input, resultsChan)
+			defer wg.Done()
+
+			// Ensure that we release the semaphore slot even in case of a panic
+			defer func() {
+				<-semaphore
+			}()
+
+			timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			runCommand(logger, timeoutCtx, cfg, &input, regions, resultsChan)
 		}()
 	}
 
@@ -199,7 +211,7 @@ func main() {
 
 	for _, item := range y {
 		r := humanize.FormatFloat("#,###.###", item.Price)
-		y := regions[item.Region]
-		fmt.Printf("$%s [%s] %s %s %s\n", r, y.RegionDesc, item.AZ, item.InstanceType, time.Now().Format(time.RFC3339))
+		regionDetail := regions[item.Region]
+		fmt.Printf("$%s [%s] %s %s %s %s\n", r, regionDetail.RegionDesc, item.Region, item.AZ, item.InstanceType, time.Now().Format(time.RFC3339))
 	}
 }
