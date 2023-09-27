@@ -62,19 +62,33 @@ func runCommand(logger *slog.Logger, ctx context.Context, cfg aws.Config, input 
 	resultsChan <- azs
 }
 
-var logger *slog.Logger
-
 func main() {
 	var instanceTypes string
-	var verbose, veryVerbose bool
 
 	flag.StringVar(&instanceTypes, "instanceTypes", "", "Comma-separated list of instance types to query")
-	flag.BoolVar(&verbose, "verbose", false, "Enable debug")
-	flag.BoolVar(&veryVerbose, "veryVerbose", false, "Enable debug for consumed modules")
 
 	flag.Parse()
 
-	setupLogging(logger, verbose, veryVerbose)
+	logLevel := &slog.LevelVar{} // INFO
+	logLevel.Set(slog.LevelDebug)
+	opts := slog.HandlerOptions{
+		AddSource: true,
+		Level:     logLevel,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey && len(groups) == 0 {
+				return slog.Attr{}
+			}
+			return a
+		},
+	}
+	handler1 := slog.NewTextHandler(os.Stdout, &opts)
+
+	// default logger customized
+	slog.SetDefault(slog.New(handler1))
+
+	handler2 := slog.NewTextHandler(os.Stderr, &opts)
+
+	logger := slog.New(handler2)
 
 	// Check if "instanceTypes" is empty and exit with an error if it is
 	if instanceTypes == "" {
