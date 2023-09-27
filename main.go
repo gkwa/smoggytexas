@@ -26,6 +26,8 @@ type AZs []AZPrice
 
 type AzPrices []AZPrice
 
+var logger *slog.Logger
+
 type AZPrice struct {
 	AZ           string  `json:"az"`
 	Price        float64 `json:"price"`
@@ -70,7 +72,7 @@ func main() {
 	flag.Parse()
 
 	logLevel := &slog.LevelVar{} // INFO
-	logLevel.Set(slog.LevelDebug)
+	logLevel.Set(slog.LevelInfo)
 	opts := slog.HandlerOptions{
 		AddSource: true,
 		Level:     logLevel,
@@ -88,7 +90,7 @@ func main() {
 
 	handler2 := slog.NewTextHandler(os.Stderr, &opts)
 
-	logger := slog.New(handler2)
+	logger = slog.New(handler2)
 
 	// Check if "instanceTypes" is empty and exit with an error if it is
 	if instanceTypes == "" {
