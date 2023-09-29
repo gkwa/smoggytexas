@@ -8,20 +8,10 @@ import (
 	"github.com/taylormonacelli/smoggytexas"
 )
 
-var (
-	verbose       bool
-	instanceTypes string
-)
+var instanceTypes string
 
 func init() {
-	const (
-		defaultVerbosEnabled = false
-		usage                = "Enable verbose mode"
-	)
 	flag.StringVar(&instanceTypes, "instanceTypes", "", "Comma-separated list of instance types to query")
-
-	flag.BoolVar(&verbose, "verbose", defaultVerbosEnabled, usage)
-	flag.BoolVar(&verbose, "v", defaultVerbosEnabled, usage+" (shorthand)")
 }
 
 func main() {
@@ -34,6 +24,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	status := smoggytexas.Main(instanceTypes, verbose)
+	status := smoggytexas.Main(instanceTypes)
 	os.Exit(status)
 }

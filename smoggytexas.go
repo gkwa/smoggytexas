@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"log/slog"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -61,9 +60,10 @@ func getPriceHistory(ctx context.Context, cfg aws.Config, input *ec2.DescribeSpo
 	resultsChan <- azs
 }
 
-func Main(instanceTypes string, verbose bool) int {
-	var logLevel = &slog.LevelVar{} // INFO
-	var opts = slog.HandlerOptions{
+func Main(instanceTypes string) int {
+	logLevel := &slog.LevelVar{} // INFO
+	logLevel.Set(slog.LevelDebug)
+	opts := slog.HandlerOptions{
 		AddSource: true,
 		Level:     logLevel,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
@@ -73,9 +73,8 @@ func Main(instanceTypes string, verbose bool) int {
 			return a
 		},
 	}
-	var handler1 = slog.NewTextHandler(os.Stdout, &opts)
+	handler1 := slog.NewTextHandler(os.Stderr, &opts)
 
-	logLevel.Set(slog.LevelInfo)
 	slog.SetDefault(slog.New(handler1))
 
 	instanceTypeSlice := strings.Split(instanceTypes, ",")
@@ -93,34 +92,10 @@ func Main(instanceTypes string, verbose bool) int {
 		return 1
 	}
 
-	// Print the JSON string
 	slog.Debug("debug instance types", "instance_types", string(instTypesJsonString))
 	slog.Debug("regions", "count", len(regions))
 
-	// List of regions to exclude
-	reginPrefixes := []string{"us-gov", "cn-"}
-	slog.Debug("regions", "exclude prefix", reginPrefixes)
-
-	// Create a filtered map
-	filteredMap := make(lemondrop.RegionDetails)
-
-	for key, value := range regions {
-		found := false
-
-		for _, prefix := range reginPrefixes {
-			if strings.HasPrefix(key, prefix) {
-				found = true
-				break
-			}
-		}
-
-		// If none of the substrings were found in the key, add it to the filtered map
-		if !found {
-			filteredMap[key] = value
-		}
-	}
-
-	regions = filteredMap
+	regions = filterOutRegionsWithPrefix(regions, []string{"us-gov", "cn-"})
 
 	resultsChan := make(chan AzPrices, len(regions)*len(instanceTypeSlice))
 
@@ -201,4 +176,29 @@ func Main(instanceTypes string, verbose bool) int {
 	}
 
 	return 0
+}
+
+func filterOutRegionsWithPrefix(allRegions lemondrop.RegionDetails, regionPrefixes []string) lemondrop.RegionDetails {
+	slog.Debug("regions", "exclude prefix", regionPrefixes)
+
+	// Create a filtered map
+	filteredMap := make(lemondrop.RegionDetails)
+
+	for key, value := range allRegions {
+		found := false
+
+		for _, prefix := range regionPrefixes {
+			if strings.HasPrefix(key, prefix) {
+				found = true
+				break
+			}
+		}
+
+		// If none of the substrings were found in the key, add it to the filtered map
+		if !found {
+			filteredMap[key] = value
+		}
+	}
+
+	return filteredMap
 }
