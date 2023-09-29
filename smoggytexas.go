@@ -3,7 +3,6 @@ package smoggytexas
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"sort"
@@ -12,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/exp/slog"
+	"log/slog"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -20,14 +19,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/dustin/go-humanize"
 	"github.com/taylormonacelli/lemondrop"
-	"github.com/taylormonacelli/smoggytexas/logging"
 )
 
 type AZs []AZPrice
 
 type AzPrices []AZPrice
-
-var logger *slog.Logger
 
 type AZPrice struct {
 	AZ           string  `json:"az"`
@@ -38,12 +34,12 @@ type AZPrice struct {
 
 var regions lemondrop.RegionDetails
 
-func runCommand(ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPriceHistoryInput, resultsChan chan<- AzPrices) {
+func getPriceHistory(ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPriceHistoryInput, resultsChan chan<- AzPrices) {
 	client := ec2.NewFromConfig(cfg)
 
 	resp, err := client.DescribeSpotPriceHistory(ctx, input)
 	if err != nil {
-		logger.Error(err.Error(), "region", cfg.Region, "regionDesc", regions[cfg.Region].RegionDesc)
+		slog.Error(err.Error(), "region", cfg.Region, "regionDesc", regions[cfg.Region].RegionDesc)
 		return
 	}
 	var azs AzPrices
@@ -65,19 +61,22 @@ func runCommand(ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPric
 	resultsChan <- azs
 }
 
-func Main() int {
-	var instanceTypes string
-
-	flag.Parse()
-
-	logger := logging.MakeLogger()
-
-	// Check if "instanceTypes" is empty and exit with an error if it is
-	if instanceTypes == "" {
-		fmt.Println("Error: The 'instanceTypes' flag is required.")
-		flag.Usage()
-		os.Exit(1)
+func Main(instanceTypes string, verbose bool) int {
+	var logLevel = &slog.LevelVar{} // INFO
+	var opts = slog.HandlerOptions{
+		AddSource: true,
+		Level:     logLevel,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey && len(groups) == 0 {
+				return slog.Attr{}
+			}
+			return a
+		},
 	}
+	var handler1 = slog.NewTextHandler(os.Stdout, &opts)
+
+	logLevel.Set(slog.LevelInfo)
+	slog.SetDefault(slog.New(handler1))
 
 	instanceTypeSlice := strings.Split(instanceTypes, ",")
 
@@ -85,22 +84,22 @@ func Main() int {
 
 	regions, err = lemondrop.GetRegionDetails()
 	if err != nil {
-		logger.Error(err.Error())
+		slog.Error(err.Error())
 	}
 
 	instTypesJsonString, err := json.Marshal(instanceTypeSlice)
 	if err != nil {
-		logger.Warn("Error marshaling JSON: ", err)
+		slog.Warn("Error marshaling JSON: ", err)
 		return 1
 	}
 
 	// Print the JSON string
-	logger.Debug(string(instTypesJsonString))
-	logger.Debug("regions", "count", len(regions))
+	slog.Debug("debug instance types", "instance_types", string(instTypesJsonString))
+	slog.Debug("regions", "count", len(regions))
 
 	// List of regions to exclude
 	reginPrefixes := []string{"us-gov", "cn-"}
-	logger.Debug("regions", "exclude prefix", reginPrefixes)
+	slog.Debug("regions", "exclude prefix", reginPrefixes)
 
 	// Create a filtered map
 	filteredMap := make(lemondrop.RegionDetails)
@@ -134,10 +133,10 @@ func Main() int {
 	var wg sync.WaitGroup
 
 	for _, regionDetail := range regions {
-		logger.Debug("regions loop", "region", regionDetail.RegionCode)
+		slog.Debug("regions loop", "region", regionDetail.RegionCode)
 		cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(regionDetail.RegionCode))
 		if err != nil {
-			logger.Error("Error loading AWS configuration:", err)
+			slog.Error("Error loading AWS configuration:", err)
 		}
 
 		var instanceTypeFilters []types.Filter
@@ -170,7 +169,7 @@ func Main() int {
 			timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			runCommand(timeoutCtx, cfg, &input, resultsChan)
+			getPriceHistory(timeoutCtx, cfg, &input, resultsChan)
 		}()
 	}
 

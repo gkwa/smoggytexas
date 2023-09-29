@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	"github.com/taylormonacelli/smoggytexas"
@@ -24,6 +25,15 @@ func init() {
 }
 
 func main() {
-	status := smoggytexas.Main()
+	flag.Parse()
+
+	// Check if "instanceTypes" is empty and exit with an error if it is
+	if instanceTypes == "" {
+		fmt.Println("Error: The 'instanceTypes' flag is required.")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	status := smoggytexas.Main(instanceTypes, verbose)
 	os.Exit(status)
 }
