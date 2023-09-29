@@ -1,4 +1,4 @@
-package main
+package smoggytexas
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/dustin/go-humanize"
 	"github.com/taylormonacelli/lemondrop"
+	"github.com/taylormonacelli/smoggytexas/logging"
 )
 
 type AZs []AZPrice
@@ -37,7 +38,7 @@ type AZPrice struct {
 
 var regions lemondrop.RegionDetails
 
-func runCommand(logger *slog.Logger, ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPriceHistoryInput, resultsChan chan<- AzPrices) {
+func runCommand(ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPriceHistoryInput, resultsChan chan<- AzPrices) {
 	client := ec2.NewFromConfig(cfg)
 
 	resp, err := client.DescribeSpotPriceHistory(ctx, input)
@@ -64,33 +65,12 @@ func runCommand(logger *slog.Logger, ctx context.Context, cfg aws.Config, input 
 	resultsChan <- azs
 }
 
-func main() {
+func Main() int {
 	var instanceTypes string
-
-	flag.StringVar(&instanceTypes, "instanceTypes", "", "Comma-separated list of instance types to query")
 
 	flag.Parse()
 
-	logLevel := &slog.LevelVar{} // INFO
-	logLevel.Set(slog.LevelInfo)
-	opts := slog.HandlerOptions{
-		AddSource: true,
-		Level:     logLevel,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey && len(groups) == 0 {
-				return slog.Attr{}
-			}
-			return a
-		},
-	}
-	handler1 := slog.NewTextHandler(os.Stdout, &opts)
-
-	// default logger customized
-	slog.SetDefault(slog.New(handler1))
-
-	handler2 := slog.NewTextHandler(os.Stderr, &opts)
-
-	logger = slog.New(handler2)
+	logger := logging.MakeLogger()
 
 	// Check if "instanceTypes" is empty and exit with an error if it is
 	if instanceTypes == "" {
@@ -111,16 +91,16 @@ func main() {
 	instTypesJsonString, err := json.Marshal(instanceTypeSlice)
 	if err != nil {
 		logger.Warn("Error marshaling JSON: ", err)
-		return
+		return 1
 	}
 
 	// Print the JSON string
 	logger.Debug(string(instTypesJsonString))
 	logger.Debug("regions", "count", len(regions))
 
-	// List of substrings to search for
-	substrings := []string{"us-gov", "cn-"}
-	logger.Debug("regions", "exclude prefix", substrings)
+	// List of regions to exclude
+	reginPrefixes := []string{"us-gov", "cn-"}
+	logger.Debug("regions", "exclude prefix", reginPrefixes)
 
 	// Create a filtered map
 	filteredMap := make(lemondrop.RegionDetails)
@@ -128,7 +108,7 @@ func main() {
 	for key, value := range regions {
 		found := false
 
-		for _, prefix := range substrings {
+		for _, prefix := range reginPrefixes {
 			if strings.HasPrefix(key, prefix) {
 				found = true
 				break
@@ -190,7 +170,7 @@ func main() {
 			timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			runCommand(logger, timeoutCtx, cfg, &input, resultsChan)
+			runCommand(timeoutCtx, cfg, &input, resultsChan)
 		}()
 	}
 
@@ -220,4 +200,6 @@ func main() {
 		regionDetail := regions[item.Region]
 		fmt.Printf("$%s [%s] %s %s %s %s\n", r, regionDetail.RegionDesc, item.Region, item.AZ, item.InstanceType, time.Now().Format(time.RFC3339))
 	}
+
+	return 0
 }
