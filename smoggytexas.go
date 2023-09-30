@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/dustin/go-humanize"
 	"github.com/taylormonacelli/lemondrop"
+	"github.com/taylormonacelli/goldbug"
 )
 
 type AZs []AZPrice
@@ -60,24 +60,6 @@ func getPriceHistory(ctx context.Context, cfg aws.Config, input *ec2.DescribeSpo
 	resultsChan <- azs
 }
 
-func setDefaultLogger() {
-	logLevel := &slog.LevelVar{} // INFO
-	logLevel.Set(slog.LevelDebug)
-	opts := slog.HandlerOptions{
-		AddSource: true,
-		Level:     logLevel,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey && len(groups) == 0 {
-				return slog.Attr{}
-			}
-			return a
-		},
-	}
-	handler1 := slog.NewTextHandler(os.Stderr, &opts)
-
-	slog.SetDefault(slog.New(handler1))
-}
-
 func getRegions(instanceTypeSlice, ignoreRegionsPrefixes []string) (lemondrop.RegionDetails, error) {
 	var err error
 
@@ -102,7 +84,7 @@ func getRegions(instanceTypeSlice, ignoreRegionsPrefixes []string) (lemondrop.Re
 }
 
 func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
-	setDefaultLogger()
+	goldbug.SetDefaultLogger()
 
 	instanceTypeSlice := strings.Split(commaSepInstanceTypes, ",")
 	ignoreRegionsPrefixes := strings.Split(ignoreCommaSepRegions, ",")
