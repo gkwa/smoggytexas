@@ -16,8 +16,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/dustin/go-humanize"
-	"github.com/taylormonacelli/lemondrop"
 	"github.com/taylormonacelli/goldbug"
+	"github.com/taylormonacelli/lemondrop"
 )
 
 type AZs []AZPrice
@@ -46,6 +46,7 @@ func getPriceHistory(ctx context.Context, cfg aws.Config, input *ec2.DescribeSpo
 	for _, price := range resp.SpotPriceHistory {
 		s, err := strconv.ParseFloat(*price.SpotPrice, 64)
 		if err != nil {
+			slog.Error("parse spotprice", "error", err.Error())
 			panic(err)
 		}
 
@@ -87,8 +88,8 @@ func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
 	goldbug.SetDefaultLogger()
 
 	instanceTypeSlice := strings.Split(commaSepInstanceTypes, ",")
-	ignoreRegionsPrefixes := strings.Split(ignoreCommaSepRegions, ",")
 
+	ignoreRegionsPrefixes := strings.Split(ignoreCommaSepRegions, ",")
 	regions, err := getRegions(instanceTypeSlice, ignoreRegionsPrefixes)
 	if err != nil {
 		slog.Error("fetching regions", "error", err.Error())
@@ -130,11 +131,10 @@ func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
 		semaphore <- struct{}{}
 
 		go func() {
-			defer wg.Done()
-
 			// Ensure that we release the semaphore slot even in case of a panic
 			defer func() {
 				<-semaphore
+				wg.Done()
 			}()
 
 			timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

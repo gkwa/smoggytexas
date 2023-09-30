@@ -11,8 +11,8 @@ import (
 var instanceTypes, ignoreCommaSepRegions string
 
 func init() {
-	flag.StringVar(&instanceTypes, "instanceTypes", "", "Comma-separated list of instance types to query")
-	flag.StringVar(&ignoreCommaSepRegions, "ignoreRegions", "", "")
+	flag.StringVar(&instanceTypes, "instanceTypes", "", "Comma-separated list of instance types to query, eg. t3a.xlarge,t3.small")
+	flag.StringVar(&ignoreCommaSepRegions, "ignoreRegions", "", "Exclude regions that start with, eg: cn-north-1,cn-")
 }
 
 func main() {
