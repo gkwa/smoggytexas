@@ -60,7 +60,7 @@ func getPriceHistory(ctx context.Context, cfg aws.Config, input *ec2.DescribeSpo
 	resultsChan <- azs
 }
 
-func Main(instanceTypes string) int {
+func setDefaultLogger() {
 	logLevel := &slog.LevelVar{} // INFO
 	logLevel.Set(slog.LevelDebug)
 	opts := slog.HandlerOptions{
@@ -76,33 +76,47 @@ func Main(instanceTypes string) int {
 	handler1 := slog.NewTextHandler(os.Stderr, &opts)
 
 	slog.SetDefault(slog.New(handler1))
+}
 
-	instanceTypeSlice := strings.Split(instanceTypes, ",")
-
+func getRegions(instanceTypeSlice, ignoreRegionsPrefixes []string) (lemondrop.RegionDetails, error) {
 	var err error
 
 	regions, err = lemondrop.GetRegionDetails()
 	if err != nil {
 		slog.Error(err.Error())
+		return lemondrop.RegionDetails{}, err
 	}
 
 	instTypesJsonString, err := json.Marshal(instanceTypeSlice)
 	if err != nil {
-		slog.Warn("Error marshaling JSON: ", err)
-		return 1
+		slog.Warn("error marshaling JSON", "error", err.Error())
+		return lemondrop.RegionDetails{}, err
 	}
 
 	slog.Debug("debug instance types", "instance_types", string(instTypesJsonString))
 	slog.Debug("regions", "count", len(regions))
 
-	regions = filterOutRegionsWithPrefix(regions, []string{"us-gov", "cn-"})
+	regions = filterOutRegionsWithPrefix(regions, ignoreRegionsPrefixes)
+	slog.Debug("regions to search", "regions", regions)
+	return regions, nil
+}
+
+func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
+	setDefaultLogger()
+
+	instanceTypeSlice := strings.Split(commaSepInstanceTypes, ",")
+	ignoreRegionsPrefixes := strings.Split(ignoreCommaSepRegions, ",")
+
+	regions, err := getRegions(instanceTypeSlice, ignoreRegionsPrefixes)
+	if err != nil {
+		slog.Error("fetching regions", "error", err.Error())
+		return 1
+	}
 
 	resultsChan := make(chan AzPrices, len(regions)*len(instanceTypeSlice))
 
 	// Define the maximum number of concurrent workers
 	maxConcurrent := 10
-
-	// Use a semaphore pattern to limit concurrent goroutines
 	semaphore := make(chan struct{}, maxConcurrent)
 
 	var wg sync.WaitGroup
@@ -178,16 +192,17 @@ func Main(instanceTypes string) int {
 	return 0
 }
 
-func filterOutRegionsWithPrefix(allRegions lemondrop.RegionDetails, regionPrefixes []string) lemondrop.RegionDetails {
-	slog.Debug("regions", "exclude prefix", regionPrefixes)
-
-	// Create a filtered map
+func filterOutRegionsWithPrefix(allRegions lemondrop.RegionDetails, excludeRegionPrefixes []string) lemondrop.RegionDetails {
 	filteredMap := make(lemondrop.RegionDetails)
+
+	if len(excludeRegionPrefixes) == 1 && excludeRegionPrefixes[0] == "" {
+		return allRegions
+	}
 
 	for key, value := range allRegions {
 		found := false
 
-		for _, prefix := range regionPrefixes {
+		for _, prefix := range excludeRegionPrefixes {
 			if strings.HasPrefix(key, prefix) {
 				found = true
 				break
@@ -196,6 +211,7 @@ func filterOutRegionsWithPrefix(allRegions lemondrop.RegionDetails, regionPrefix
 
 		// If none of the substrings were found in the key, add it to the filtered map
 		if !found {
+			slog.Debug("include region", "region", key)
 			filteredMap[key] = value
 		}
 	}

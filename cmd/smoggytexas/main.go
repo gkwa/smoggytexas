@@ -8,10 +8,11 @@ import (
 	"github.com/taylormonacelli/smoggytexas"
 )
 
-var instanceTypes string
+var instanceTypes, ignoreCommaSepRegions string
 
 func init() {
 	flag.StringVar(&instanceTypes, "instanceTypes", "", "Comma-separated list of instance types to query")
+	flag.StringVar(&ignoreCommaSepRegions, "ignoreRegions", "", "")
 }
 
 func main() {
@@ -24,6 +25,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	status := smoggytexas.Main(instanceTypes)
+	status := smoggytexas.Main(instanceTypes, ignoreCommaSepRegions)
 	os.Exit(status)
 }
