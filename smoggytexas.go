@@ -105,6 +105,9 @@ func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
 	var wg sync.WaitGroup
 
 	for _, regionDetail := range regions {
+		wg.Add(1)
+		semaphore <- struct{}{} // Acquire a slot in the semaphore
+
 		slog.Debug("regions loop", "region", regionDetail.RegionCode)
 		cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(regionDetail.RegionCode))
 		if err != nil {
@@ -112,7 +115,6 @@ func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
 		}
 
 		var instanceTypeFilters []types.Filter
-
 		instanceTypeFilter := types.Filter{
 			Name:   aws.String("instance-type"),
 			Values: instanceTypeSlice,
@@ -125,15 +127,9 @@ func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
 			StartTime:           aws.Time(time.Now()),
 		}
 
-		wg.Add(1)
-
-		// Acquire a slot in the semaphore
-		semaphore <- struct{}{}
-
-		go func() {
-			// Ensure that we release the semaphore slot even in case of a panic
+		go func(regionDetail lemondrop.RegionComponents) {
 			defer func() {
-				<-semaphore
+				<-semaphore // release the semaphore
 				wg.Done()
 			}()
 
@@ -141,14 +137,11 @@ func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
 			defer cancel()
 
 			getPriceHistory(timeoutCtx, cfg, &input, resultsChan)
-		}()
+		}(regionDetail)
 	}
 
 	go func() {
-		// Wait for all goroutines to finish
 		wg.Wait()
-
-		// Close the resultsChan when all goroutines are done
 		close(resultsChan)
 	}()
 
