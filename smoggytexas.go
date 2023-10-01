@@ -33,8 +33,8 @@ type AZPrice struct {
 
 var regions lemondrop.RegionDetails
 
-func getPriceHistory(ctx context.Context, cfg aws.Config, input *ec2.DescribeSpotPriceHistoryInput, resultsChan chan<- AzPrices) {
-	client := ec2.NewFromConfig(cfg)
+func runPriceHistoryQuery(ctx context.Context, cfg *aws.Config, input *ec2.DescribeSpotPriceHistoryInput, resultsChan chan<- AzPrices) {
+	client := ec2.NewFromConfig(*cfg)
 
 	resp, err := client.DescribeSpotPriceHistory(ctx, input)
 	if err != nil {
@@ -109,23 +109,11 @@ func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
 		semaphore <- struct{}{} // Acquire a slot in the semaphore
 
 		slog.Debug("regions loop", "region", regionDetail.RegionCode)
-		cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(regionDetail.RegionCode))
-		if err != nil {
-			slog.Error("Error loading AWS configuration:", err)
-		}
 
-		var instanceTypeFilters []types.Filter
-		instanceTypeFilter := types.Filter{
-			Name:   aws.String("instance-type"),
-			Values: instanceTypeSlice,
-		}
-		instanceTypeFilters = append(instanceTypeFilters, instanceTypeFilter)
+		var cfg aws.Config
+		var input ec2.DescribeSpotPriceHistoryInput
 
-		input := ec2.DescribeSpotPriceHistoryInput{
-			Filters:             instanceTypeFilters,
-			ProductDescriptions: []string{"Linux/UNIX"},
-			StartTime:           aws.Time(time.Now()),
-		}
+		setupPriceHistoryQuery(&cfg, &input, &regionDetail, &instanceTypeSlice)
 
 		go func(regionDetail lemondrop.RegionComponents) {
 			defer func() {
@@ -136,7 +124,7 @@ func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
 			timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			getPriceHistory(timeoutCtx, cfg, &input, resultsChan)
+			runPriceHistoryQuery(timeoutCtx, &cfg, &input, resultsChan)
 		}(regionDetail)
 	}
 
@@ -165,6 +153,27 @@ func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
 	}
 
 	return 0
+}
+
+func setupPriceHistoryQuery(cfg *aws.Config, input *ec2.DescribeSpotPriceHistoryInput, regionDetail *lemondrop.RegionComponents, instanceTypes *[]string) {
+	var err error
+	*cfg, err = config.LoadDefaultConfig(context.TODO(), config.WithRegion(regionDetail.RegionCode))
+	if err != nil {
+		slog.Error("Error loading AWS configuration:", err)
+	}
+
+	var instanceTypeFilters []types.Filter
+	instanceTypeFilter := types.Filter{
+		Name:   aws.String("instance-type"),
+		Values: *instanceTypes,
+	}
+	instanceTypeFilters = append(instanceTypeFilters, instanceTypeFilter)
+
+	*input = ec2.DescribeSpotPriceHistoryInput{
+		Filters:             instanceTypeFilters,
+		ProductDescriptions: []string{"Linux/UNIX"},
+		StartTime:           aws.Time(time.Now()),
+	}
 }
 
 func filterOutRegionsWithPrefix(allRegions lemondrop.RegionDetails, excludeRegionPrefixes []string) lemondrop.RegionDetails {
