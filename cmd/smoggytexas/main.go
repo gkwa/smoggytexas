@@ -3,16 +3,21 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/taylormonacelli/smoggytexas"
 )
 
 var instanceTypes, ignoreCommaSepRegions string
+var verbose bool
 
 func init() {
 	flag.StringVar(&instanceTypes, "instanceTypes", "", "Comma-separated list of instance types to query, eg. t3a.xlarge,t3.small")
 	flag.StringVar(&ignoreCommaSepRegions, "ignoreRegions", "", "Exclude regions that start with, eg: cn-north-1,cn-")
+	flag.BoolVar(&verbose, "verbose", false, "Enable verbose output")
+	flag.BoolVar(&verbose, "v", false, "Enable verbose output (shorthand)")
+	flag.Parse()
 }
 
 func main() {
@@ -23,6 +28,10 @@ func main() {
 		fmt.Println("Error: The 'instanceTypes' flag is required.")
 		flag.Usage()
 		os.Exit(1)
+	}
+
+	if verbose {
+		smoggytexas.SetDefaultLogger(slog.LevelDebug)
 	}
 
 	status := smoggytexas.Main(instanceTypes, ignoreCommaSepRegions)

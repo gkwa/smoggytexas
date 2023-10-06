@@ -16,7 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/dustin/go-humanize"
-	"github.com/taylormonacelli/goldbug"
 	"github.com/taylormonacelli/lemondrop"
 )
 
@@ -85,8 +84,6 @@ func getRegions(instanceTypeSlice, ignoreRegionsPrefixes []string) (lemondrop.Re
 }
 
 func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
-	goldbug.SetDefaultLogger()
-
 	instanceTypeSlice := strings.Split(commaSepInstanceTypes, ",")
 
 	ignoreRegionsPrefixes := strings.Split(ignoreCommaSepRegions, ",")
