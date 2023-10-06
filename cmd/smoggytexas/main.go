@@ -9,8 +9,10 @@ import (
 	"github.com/taylormonacelli/smoggytexas"
 )
 
-var instanceTypes, ignoreCommaSepRegions string
-var verbose bool
+var (
+	instanceTypes, ignoreCommaSepRegions string
+	verbose                              bool
+)
 
 func init() {
 	flag.StringVar(&instanceTypes, "instanceTypes", "", "Comma-separated list of instance types to query, eg. t3a.xlarge,t3.small")

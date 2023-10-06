@@ -1,9 +1,8 @@
 package smoggytexas
 
 import (
-	"os"
-
 	"log/slog"
+	"os"
 )
 
 func SetDefaultLogger(level slog.Level) {
