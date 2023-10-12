@@ -35,12 +35,19 @@ var regions lemondrop.RegionDetails
 func runPriceHistoryQuery(ctx context.Context, cfg *aws.Config, input *ec2.DescribeSpotPriceHistoryInput, resultsChan chan<- AzPrices) {
 	client := ec2.NewFromConfig(*cfg)
 
+	slog.Debug("runPriceHistoryQuery1", "region", cfg.Region)
+
 	resp, err := client.DescribeSpotPriceHistory(ctx, input)
 	if err != nil {
-		slog.Error(err.Error(), "region", cfg.Region, "regionDesc", regions[cfg.Region].RegionDesc)
+		slog.Error(err.Error(), "regionDesc", regions[cfg.Region].RegionDesc, "region", cfg.Region)
 		return
 	}
+
+	slog.Debug("runPriceHistoryQuery2", "region", cfg.Region)
+
 	var azs AzPrices
+
+	slog.Debug("spot history records", "count", len(resp.SpotPriceHistory), "instanceTypeFilter", "region", cfg.Region)
 
 	for _, price := range resp.SpotPriceHistory {
 		s, err := strconv.ParseFloat(*price.SpotPrice, 64)
@@ -55,6 +62,8 @@ func runPriceHistoryQuery(ctx context.Context, cfg *aws.Config, input *ec2.Descr
 			Price:        s,
 			InstanceType: string(price.InstanceType),
 		})
+
+		slog.Debug("price check", "price", s, "instanceType", string(price.InstanceType), "region", cfg.Region)
 	}
 
 	resultsChan <- azs
@@ -112,7 +121,7 @@ func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
 
 		setupPriceHistoryQuery(&cfg, &input, &regionDetail, &instanceTypeSlice)
 
-		go func(regionDetail lemondrop.RegionComponents) {
+		go func() {
 			defer func() {
 				<-semaphore // release the semaphore
 				wg.Done()
@@ -122,7 +131,7 @@ func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
 			defer cancel()
 
 			runPriceHistoryQuery(timeoutCtx, &cfg, &input, resultsChan)
-		}(regionDetail)
+		}()
 	}
 
 	go func() {
