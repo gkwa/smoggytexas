@@ -3,9 +3,9 @@ module github.com/taylormonacelli/smoggytexas
 go 1.21.1
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.21.0
-	github.com/aws/aws-sdk-go-v2/config v1.18.43
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.123.0
+	github.com/aws/aws-sdk-go-v2 v1.32.2
+	github.com/aws/aws-sdk-go-v2/config v1.28.0
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.184.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/taylormonacelli/lemondrop v0.0.5
 )
