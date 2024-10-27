@@ -47,7 +47,7 @@ func runPriceHistoryQuery(ctx context.Context, cfg *aws.Config, input *ec2.Descr
 
 	var azs AzPrices
 
-	slog.Debug("spot history records", "count", len(resp.SpotPriceHistory), "instanceTypeFilter", "region", cfg.Region)
+	slog.Debug("spot history records", "count", len(resp.SpotPriceHistory), "region", cfg.Region)
 
 	for _, price := range resp.SpotPriceHistory {
 		s, err := strconv.ParseFloat(*price.SpotPrice, 64)
@@ -165,7 +165,7 @@ func setupPriceHistoryQuery(cfg *aws.Config, input *ec2.DescribeSpotPriceHistory
 	var err error
 	*cfg, err = config.LoadDefaultConfig(context.TODO(), config.WithRegion(regionDetail.RegionCode))
 	if err != nil {
-		slog.Error("Error loading AWS configuration:", err)
+		slog.Error("loading AWS configuration", "error", err.Error())
 	}
 
 	var instanceTypeFilters []types.Filter
