@@ -6,6 +6,7 @@
       "automerge": true,
       "automergeStrategy": "merge-commit",
       "automergeType": "branch",
+      "ignoreTests": true,
       "matchDepTypes": ["*"],
       "recreateWhen": "always"
     }
