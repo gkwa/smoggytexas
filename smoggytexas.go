@@ -69,8 +69,25 @@ func runPriceHistoryQuery(ctx context.Context, cfg *aws.Config, input *ec2.Descr
 	resultsChan <- azs
 }
 
-func getRegions(instanceTypeSlice, ignoreRegionsPrefixes []string) (lemondrop.RegionDetails, error) {
+func getRegions(instanceTypeSlice, ignoreRegionsPrefixes []string, dryRun bool) (lemondrop.RegionDetails, error) {
 	var err error
+
+	if dryRun {
+		// Return mock regions for dry run
+		mockRegions := lemondrop.RegionDetails{
+			"us-east-1": lemondrop.RegionComponents{
+				RegionCode: "us-east-1",
+				RegionDesc: "US East (N. Virginia)",
+			},
+			"us-west-2": lemondrop.RegionComponents{
+				RegionCode: "us-west-2",
+				RegionDesc: "US West (Oregon)",
+			},
+		}
+		regions = filterOutRegionsWithPrefix(mockRegions, ignoreRegionsPrefixes)
+		slog.Info("Using mock regions for dry run", "count", len(regions))
+		return regions, nil
+	}
 
 	regions, err = lemondrop.GetRegionDetails()
 	if err != nil {
@@ -92,14 +109,23 @@ func getRegions(instanceTypeSlice, ignoreRegionsPrefixes []string) (lemondrop.Re
 	return regions, nil
 }
 
-func Main(commaSepInstanceTypes, ignoreCommaSepRegions string) int {
+func Main(commaSepInstanceTypes, ignoreCommaSepRegions string, dryRun bool) int {
 	instanceTypeSlice := strings.Split(commaSepInstanceTypes, ",")
 
 	ignoreRegionsPrefixes := strings.Split(ignoreCommaSepRegions, ",")
-	regions, err := getRegions(instanceTypeSlice, ignoreRegionsPrefixes)
+	regions, err := getRegions(instanceTypeSlice, ignoreRegionsPrefixes, dryRun)
 	if err != nil {
 		slog.Error("fetching regions", "error", err.Error())
 		return 1
+	}
+
+	if dryRun {
+		slog.Info("Dry run completed successfully")
+		slog.Info("Configuration validated",
+			"instanceTypes", instanceTypeSlice,
+			"regionsToSearch", len(regions),
+			"ignoredRegionPrefixes", ignoreRegionsPrefixes)
+		return 0
 	}
 
 	resultsChan := make(chan AzPrices, len(regions)*len(instanceTypeSlice))

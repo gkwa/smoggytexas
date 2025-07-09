@@ -13,6 +13,7 @@ import (
 var (
 	instanceTypes, ignoreCommaSepRegions string
 	verbose                              bool
+	dryRun                               bool
 )
 
 func init() {
@@ -20,6 +21,7 @@ func init() {
 	flag.StringVar(&ignoreCommaSepRegions, "ignoreRegions", "", "Exclude regions that start with, eg: cn-north-1,cn-")
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	flag.BoolVar(&verbose, "v", false, "Enable verbose output (shorthand)")
+	flag.BoolVar(&dryRun, "dry-run", false, "Dry run mode - validate configuration without making AWS calls")
 	flag.Parse()
 }
 
@@ -37,6 +39,6 @@ func main() {
 		goldbug.SetDefaultLoggerText(slog.LevelDebug)
 	}
 
-	status := smoggytexas.Main(instanceTypes, ignoreCommaSepRegions)
+	status := smoggytexas.Main(instanceTypes, ignoreCommaSepRegions, dryRun)
 	os.Exit(status)
 }
